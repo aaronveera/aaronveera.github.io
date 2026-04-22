@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aaron Veerasuntharam</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #0a0e27;
+    color: #e8e4d9;
+    font-family: 'Cormorant Garamond', serif;
+  }
+
+  #canvas-container {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    cursor: grab;
+  }
+  #canvas-container:active { cursor: grabbing; }
+
+  canvas { display: block; }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+  }
+  .overlay > * { pointer-events: auto; }
+
+  /* Top name */
+  .top-name {
+    position: fixed;
+    top: 44px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 300;
+    font-size: clamp(22px, 2.2vw, 30px);
+    letter-spacing: 0.04em;
+    color: #f0e9d6;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    animation: nameFade 2s cubic-bezier(0.22, 1, 0.36, 1) 0.8s forwards;
+  }
+  .top-name em { font-style: italic; font-weight: 400; color: #d4af37; }
+
+  /* Navigator panel */
+  .legend {
+    position: fixed;
+    bottom: 40px;
+    left: 48px;
+    width: 360px;
+    max-height: calc(100vh - 180px);
+    padding: 22px 24px 22px;
+    background: rgba(10, 14, 39, 0.62);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    border-radius: 2px;
+    opacity: 0;
+    animation: fadeIn 1.8s ease-out 2.4s forwards;
+    transition: border-color 0.4s ease;
+    display: flex;
+    flex-direction: column;
+  }
+  .legend.active { border-color: rgba(212, 175, 55, 0.45); }
+
+  .legend-header {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: rgba(212, 175, 55, 0.85);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .legend-header-left { display: flex; align-items: center; gap: 10px; }
+  .legend-header-left::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #d4af37;
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.8);
+  }
+
+  .legend-close {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.28em;
+    color: rgba(232, 228, 217, 0.5);
+    cursor: pointer;
+    background: none; border: none;
+    padding: 2px 4px;
+    transition: color 0.2s;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .legend.active .legend-close { opacity: 1; pointer-events: auto; }
+  .legend-close:hover { color: #d4af37; }
+
+  .legend-content {
+    position: relative;
+    min-height: 140px;
+    overflow-y: auto;
+    flex: 1;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(212, 175, 55, 0.3) transparent;
+  }
+
+  .legend-content::-webkit-scrollbar { width: 4px; }
+  .legend-content::-webkit-scrollbar-track { background: transparent; }
+  .legend-content::-webkit-scrollbar-thumb {
+    background: rgba(212, 175, 55, 0.3);
+    border-radius: 2px;
+  }
+
+  .legend-view {
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.35s ease-out, transform 0.35s ease-out;
+    pointer-events: none;
+  }
+  .legend-view.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+    position: relative;
+  }
+  .legend-view:not(.visible) {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+  }
+
+  .legend-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 18px;
+    color: #f0e9d6;
+    margin-bottom: 12px;
+    line-height: 1.35;
+  }
+
+  .legend-body {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 400;
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: rgba(232, 228, 217, 0.78);
+  }
+  .legend-body em { color: #d4af37; font-style: normal; }
+
+  .legend-list {
+    list-style: none;
+    padding: 0; margin: 0;
+    display: flex; flex-direction: column;
+    gap: 10px;
+  }
+  .legend-list li {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: rgba(232, 228, 217, 0.8);
+    padding-left: 18px;
+    position: relative;
+  }
+  .legend-list li::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 11px;
+    width: 10px; height: 1px;
+    background: rgba(212, 175, 55, 0.55);
+  }
+  .legend-list li em { font-style: italic; color: #d4af37; }
+
+  .contact-rows { display: flex; flex-direction: column; gap: 12px; }
+  .contact-row {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 15px;
+    color: rgba(232, 228, 217, 0.85);
+  }
+  .contact-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: rgba(232, 228, 217, 0.5);
+    min-width: 60px;
+  }
+  .contact-row a {
+    color: #d4af37;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+    transition: border-color 0.2s;
+  }
+  .contact-row a:hover { border-bottom-color: #d4af37; }
+
+  /* Bottom right */
+  .bottom-right {
+    position: fixed;
+    bottom: 40px; right: 48px;
+    display: flex; flex-direction: column;
+    align-items: flex-end; gap: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: rgba(232, 228, 217, 0.5);
+    opacity: 0;
+    animation: fadeIn 2s ease-out 2.6s forwards;
+    pointer-events: none;
+  }
+  .bottom-right .coord { color: rgba(232, 228, 217, 0.55); }
+  .bottom-right .hint {
+    display: flex; align-items: center; gap: 10px;
+    color: rgba(232, 228, 217, 0.4);
+  }
+  .bottom-right .hint .dot {
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: #d4af37;
+    box-shadow: 0 0 8px rgba(212, 175, 55, 0.8);
+    animation: pulse 2.8s ease-in-out infinite;
+  }
+
+  /* Star labels */
+  .star-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: #d4af37;
+    white-space: nowrap;
+    padding: 5px 10px;
+    background: rgba(10, 14, 39, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    border-radius: 1px;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.35s ease-out, transform 0.35s ease-out;
+    pointer-events: none;
+  }
+  .star-label.visible { opacity: 1; transform: translateY(0); }
+
+  .grain {
+    position: fixed; inset: 0; z-index: 4;
+    pointer-events: none;
+    opacity: 0.04;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .vignette {
+    position: fixed; inset: 0; z-index: 2;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 30%, rgba(10, 14, 39, 0.85) 100%);
+  }
+
+  @keyframes nameFade {
+    from { opacity: 0; transform: translateX(-50%) translateY(-8px); filter: blur(4px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); filter: blur(0); }
+  }
+  @keyframes fadeIn { to { opacity: 1; } }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.6; transform: scale(1); }
+    50%      { opacity: 1;   transform: scale(1.4); }
+  }
+
+  @media (max-width: 640px) {
+    .legend { left: 20px; bottom: 24px; width: calc(100vw - 40px); padding: 16px 18px; }
+    .bottom-right { right: 20px; bottom: 24px; }
+    .top-name { font-size: 20px; top: 28px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+<div class="vignette"></div>
+<div class="grain"></div>
+
+<div class="overlay">
+  <div class="top-name">Aaron <em>Veerasuntharam</em></div>
+
+  <aside class="legend" id="legend">
+    <div class="legend-header">
+      <div class="legend-header-left" id="legendHeaderLabel">The Navigator</div>
+      <button class="legend-close" id="legendClose">← Back</button>
+    </div>
+
+    <div class="legend-content">
+
+      <div class="legend-view visible" data-view="about">
+        <div class="legend-title">About me.</div>
+        <ul class="legend-list">
+          <li>I'm a <em>senior product manager</em> in Cisco's 3P Technology Office, leading <em>AI enablement and fluency</em> for our 90,000 employees.</li>
+          <li>Before Cisco I founded <em>Brilliant Education NYC</em> — a tutoring program for underrepresented students testing into New York City's notoriously competitive specialized high schools — and was an early employee at WeWork.</li>
+          <li>I studied at Wesleyan and got my MBA at <em>Berkeley Haas</em> as a Consortium Fellow.</li>
+          <li>I serve on <em>Wesleyan's Board of Trustees</em> as Vice Chair of the Campus Affairs Committee, and I'm an <em>Aspen Institute fellow</em> through their Education &amp; Career Mobility program.</li>
+          <li>I grew up in Scarborough, Toronto as a first-gen kid, and now live in Brooklyn with my partner and our dog Buddy.</li>
+          <li>When I'm not working — I'm probably running, playing piano, traveling, or hosting apartment recitals for friends.</li>
+          <li>Always happy to chat — <em>click a star</em> to say hi.</li>
+        </ul>
+      </div>
+
+      <div class="legend-view" data-view="Work">
+        <div class="legend-title">What I'm working on.</div>
+        <ul class="legend-list">
+          <li>Enabling <em>AI fluency at scale</em> — helping over 90,000 Cisco employees become genuinely capable with AI.</li>
+          <li><em>The Workflow Constellation</em> — an interactive research map of the workflows AI is redesigning.</li>
+          <li>Consulting with organizations on AI adoption for their teams.</li>
+        </ul>
+      </div>
+
+      <div class="legend-view" data-view="Writing">
+        <div class="legend-title">Things I'm writing.</div>
+        <ul class="legend-list">
+          <li>An op-ed with <em>Barbara Oakley</em> on AI and education <em>(forthcoming)</em>.</li>
+          <li>Building off my TikTok channel, writing <em>an essay series about closing the AI adoption gap</em>.</li>
+        </ul>
+      </div>
+
+      <div class="legend-view" data-view="Speaking">
+        <div class="legend-title">Where I've spoken recently.</div>
+        <ul class="legend-list">
+          <li>Cisco Security Partner Demo Day — <em>AI Fundamentals</em> session (2026).</li>
+          <li>Berkeley Haas — guest lecture on AI and nonprofit governance (2026).</li>
+          <li>Wesleyan University — guest lecture on AI, presentations to the board on AI (2026).</li>
+          <li>Facilitated a session at the <em>Aspen Institute</em> on AI fluency for our fellows.</li>
+        </ul>
+      </div>
+
+      <div class="legend-view" data-view="Contact">
+        <div class="legend-title">Say hi — I'd love to hear from you.</div>
+        <div class="contact-rows">
+          <div class="contact-row">
+            <span class="contact-label">Email</span>
+            <a href="mailto:aaron_veera@mba.berkeley.edu">aaron_veera@mba.berkeley.edu</a>
+          </div>
+          <div class="contact-row">
+            <span class="contact-label">LinkedIn</span>
+            <a href="https://linkedin.com/in/aaronveera" target="_blank" rel="noopener">linkedin.com/in/aaronveera</a>
+          </div>
+          <div class="contact-row">
+            <span class="contact-label">TikTok</span>
+            <a href="https://www.tiktok.com/@aiforthepeople" target="_blank" rel="noopener">@aiforthepeople</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+  <div class="bottom-right">
+    <div class="coord" id="coordDisplay">N 40.7128° · W 74.0060°</div>
+    <div class="hint">
+      <span class="dot"></span>
+      <span>Drag to explore</span>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three":          "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/":  "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer }   from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass }       from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass }  from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { OrbitControls }    from 'three/addons/controls/OrbitControls.js';
+
+// Scene
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0e27);
+scene.fog = new THREE.FogExp2(0x0a0e27, 0.016);
+
+const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 400);
+camera.position.set(0, 0, 18);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+container.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.enableZoom = false;
+controls.enablePan = false;
+controls.rotateSpeed = 0.75;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
+controls.minPolarAngle = Math.PI * 0.38;
+controls.maxPolarAngle = Math.PI * 0.62;
+controls.target.set(0, 0, 0);
+controls.update();
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(window.innerWidth, window.innerHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+labelRenderer.domElement.style.zIndex = '2';
+container.appendChild(labelRenderer.domElement);
+
+// Starfield helper
+function makeStarfield(count, radius, sizeRange, opacity) {
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(count * 3);
+  const col = new Float32Array(count * 3);
+  const siz = new Float32Array(count);
+  const phs = new Float32Array(count);
+  const white = new THREE.Color(0xe8e4d9);
+  const paleBlue = new THREE.Color(0xc9d6f5);
+  const warmGold = new THREE.Color(0xf5d196);
+  for (let i = 0; i < count; i++) {
+    const i3 = i * 3;
+    const r = radius * (0.85 + Math.random() * 0.3);
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    pos[i3]     = r * Math.sin(phi) * Math.cos(theta);
+    pos[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    pos[i3 + 2] = r * Math.cos(phi);
+    const roll = Math.random();
+    const c = roll < 0.80 ? white : (roll < 0.92 ? paleBlue : warmGold);
+    col[i3] = c.r; col[i3 + 1] = c.g; col[i3 + 2] = c.b;
+    siz[i] = sizeRange[0] + Math.random() * (sizeRange[1] - sizeRange[0]);
+    phs[i] = Math.random() * Math.PI * 2;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('size',     new THREE.BufferAttribute(siz, 1));
+  geo.setAttribute('phase',    new THREE.BufferAttribute(phs, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uOpacity: { value: opacity } },
+    vertexShader: `
+      attribute float size; attribute float phase;
+      varying vec3 vColor; varying float vTwinkle;
+      uniform float uTime;
+      void main() {
+        vColor = color;
+        float tw = 0.55 + sin(uTime * 0.9 + phase) * 0.45;
+        vTwinkle = tw;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = size * (520.0 / -mv.z) * tw;
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor; varying float vTwinkle;
+      uniform float uOpacity;
+      void main() {
+        vec2 uv = gl_PointCoord - vec2(0.5);
+        float d = length(uv);
+        if (d > 0.5) discard;
+        float core = smoothstep(0.5, 0.0, d);
+        float halo = smoothstep(0.5, 0.15, d) * 0.3;
+        float a = (core + halo) * vTwinkle * uOpacity;
+        gl_FragColor = vec4(vColor, a);
+      }
+    `,
+    transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, vertexColors: true
+  });
+  return { points: new THREE.Points(geo, mat), material: mat };
+}
+
+const bgFar  = makeStarfield(3500, 80, [0.18, 0.35], 0.75);
+const bgNear = makeStarfield(1200, 45, [0.28, 0.55], 0.95);
+scene.add(bgFar.points);
+scene.add(bgNear.points);
+
+// Milky Way band
+const mwCount = 2000;
+const mwGeo = new THREE.BufferGeometry();
+const mwPos = new Float32Array(mwCount * 3);
+const mwCol = new Float32Array(mwCount * 3);
+const mwSiz = new Float32Array(mwCount);
+const mwPhs = new Float32Array(mwCount);
+for (let i = 0; i < mwCount; i++) {
+  const i3 = i * 3;
+  const x = (Math.random() - 0.5) * 160;
+  const y = (Math.random() - 0.5) * 18 + Math.sin(x * 0.04) * 4;
+  const z = (Math.random() - 0.5) * 30 - 25;
+  const angle = -0.25;
+  mwPos[i3]     = x * Math.cos(angle) - y * Math.sin(angle);
+  mwPos[i3 + 1] = x * Math.sin(angle) + y * Math.cos(angle);
+  mwPos[i3 + 2] = z;
+  const dim = 0.4 + Math.random() * 0.3;
+  mwCol[i3] = 0.9 * dim; mwCol[i3 + 1] = 0.86 * dim; mwCol[i3 + 2] = 0.75 * dim;
+  mwSiz[i] = 0.15 + Math.random() * 0.25;
+  mwPhs[i] = Math.random() * Math.PI * 2;
+}
+mwGeo.setAttribute('position', new THREE.BufferAttribute(mwPos, 3));
+mwGeo.setAttribute('color',    new THREE.BufferAttribute(mwCol, 3));
+mwGeo.setAttribute('size',     new THREE.BufferAttribute(mwSiz, 1));
+mwGeo.setAttribute('phase',    new THREE.BufferAttribute(mwPhs, 1));
+
+const mwMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: { value: 0 } },
+  vertexShader: `
+    attribute float size; attribute float phase;
+    varying vec3 vColor; varying float vTw;
+    uniform float uTime;
+    void main() {
+      vColor = color;
+      vTw = 0.5 + sin(uTime * 0.7 + phase) * 0.5;
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = size * (480.0 / -mv.z) * vTw;
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vColor; varying float vTw;
+    void main() {
+      vec2 uv = gl_PointCoord - vec2(0.5);
+      float d = length(uv);
+      if (d > 0.5) discard;
+      float a = smoothstep(0.5, 0.0, d) * vTw * 0.55;
+      gl_FragColor = vec4(vColor, a);
+    }
+  `,
+  transparent: true, depthWrite: false,
+  blending: THREE.AdditiveBlending, vertexColors: true
+});
+const milkyWay = new THREE.Points(mwGeo, mwMat);
+scene.add(milkyWay);
+
+// Shooting star
+function makeShootingStarTex() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0.00, 'rgba(255, 255, 240, 1.0)');
+  grad.addColorStop(0.08, 'rgba(255, 240, 200, 1.0)');
+  grad.addColorStop(0.25, 'rgba(245, 209, 150, 0.7)');
+  grad.addColorStop(0.55, 'rgba(212, 175, 55, 0.2)');
+  grad.addColorStop(1.00, 'rgba(212, 175, 55, 0.0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+class ShootingStar {
+  constructor() {
+    const headTex = makeShootingStarTex();
+    this.head = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: headTex, color: 0xffffff, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0
+    }));
+    this.head.scale.set(1.4, 1.4, 1);
+    scene.add(this.head);
+    const trailLen = 60;
+    this.trailLen = trailLen;
+    this.trailPositions = new Float32Array(trailLen * 3);
+    this.trailColors = new Float32Array(trailLen * 3);
+    this.trailGeo = new THREE.BufferGeometry();
+    this.trailGeo.setAttribute('position', new THREE.BufferAttribute(this.trailPositions, 3));
+    this.trailGeo.setAttribute('color',    new THREE.BufferAttribute(this.trailColors, 3));
+    this.trailMat = new THREE.LineBasicMaterial({
+      vertexColors: true, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    this.trail = new THREE.Line(this.trailGeo, this.trailMat);
+    scene.add(this.trail);
+    this.active = false;
+    this.nextSpawnAt = 3 + Math.random() * 4;
+    this.progress = 0;
+    this.duration = 1.6;
+    this.start = new THREE.Vector3();
+    this.end = new THREE.Vector3();
+  }
+  spawn() {
+    const side = Math.random() > 0.5 ? 1 : -1;
+    const yStart = 4 + Math.random() * 4;
+    const yEnd   = -2 - Math.random() * 3;
+    const z = -8 - Math.random() * 12;
+    this.start.set(-side * (14 + Math.random() * 4), yStart, z);
+    this.end.set(  side * (14 + Math.random() * 4), yEnd,   z + (Math.random() - 0.5) * 4);
+    this.active = true;
+    this.progress = 0;
+    this.duration = 1.3 + Math.random() * 0.7;
+    this.head.material.opacity = 0;
+    for (let i = 0; i < this.trailLen; i++) {
+      const i3 = i * 3;
+      this.trailPositions[i3]     = this.start.x;
+      this.trailPositions[i3 + 1] = this.start.y;
+      this.trailPositions[i3 + 2] = this.start.z;
+    }
+    this.trailGeo.attributes.position.needsUpdate = true;
+  }
+  update(dt, elapsed) {
+    if (!this.active) {
+      if (elapsed >= this.nextSpawnAt) this.spawn();
+      return;
+    }
+    this.progress += dt / this.duration;
+    if (this.progress >= 1) {
+      this.active = false;
+      this.head.material.opacity = 0;
+      this.trailMat.opacity = 0;
+      this.nextSpawnAt = elapsed + 5 + Math.random() * 9;
+      return;
+    }
+    const p = this.progress;
+    const ease = 1 - Math.pow(1 - p, 2);
+    const cur = new THREE.Vector3().lerpVectors(this.start, this.end, ease);
+    this.head.position.copy(cur);
+    const fadeIn  = Math.min(p / 0.08, 1);
+    const fadeOut = p > 0.7 ? Math.max(0, 1 - (p - 0.7) / 0.3) : 1;
+    const alpha = fadeIn * fadeOut;
+    this.head.material.opacity = alpha;
+    const dir = new THREE.Vector3().subVectors(this.end, this.start).normalize();
+    const trailLength = 2.8;
+    for (let i = 0; i < this.trailLen; i++) {
+      const i3 = i * 3;
+      const backT = (i / (this.trailLen - 1)) * trailLength;
+      this.trailPositions[i3]     = cur.x - dir.x * backT;
+      this.trailPositions[i3 + 1] = cur.y - dir.y * backT;
+      this.trailPositions[i3 + 2] = cur.z - dir.z * backT;
+      const tailFade = 1 - (i / (this.trailLen - 1));
+      this.trailColors[i3]     = 0.96 * tailFade;
+      this.trailColors[i3 + 1] = 0.82 * tailFade;
+      this.trailColors[i3 + 2] = 0.55 * tailFade;
+    }
+    this.trailGeo.attributes.position.needsUpdate = true;
+    this.trailGeo.attributes.color.needsUpdate = true;
+    this.trailMat.opacity = alpha * 0.9;
+  }
+}
+const shootingStar = new ShootingStar();
+
+// Constellation stars
+function makeGlowTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0.00, 'rgba(255, 240, 200, 1.0)');
+  grad.addColorStop(0.10, 'rgba(245, 209, 150, 0.95)');
+  grad.addColorStop(0.30, 'rgba(212, 175, 55, 0.4)');
+  grad.addColorStop(0.60, 'rgba(212, 175, 55, 0.1)');
+  grad.addColorStop(1.00, 'rgba(212, 175, 55, 0.0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+const glowTex = makeGlowTexture();
+
+const STAR_DATA = [
+  { name: 'Work',     view: 'Work',     pos: new THREE.Vector3(-4.8,  1.4,  2.2) },
+  { name: 'Writing',  view: 'Writing',  pos: new THREE.Vector3(-1.2,  3.0, -1.8) },
+  { name: 'Speaking', view: 'Speaking', pos: new THREE.Vector3( 2.8,  0.8,  2.6) },
+  { name: 'Contact',  view: 'Contact',  pos: new THREE.Vector3( 4.6, -1.6, -2.2) }
+];
+
+const starGroup = new THREE.Group();
+scene.add(starGroup);
+const stars = [];
+
+STAR_DATA.forEach((data, i) => {
+  const spriteMat = new THREE.SpriteMaterial({
+    map: glowTex, color: 0xffffff, transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.position.copy(data.pos);
+  const baseScale = 1.3;
+  sprite.scale.set(baseScale, baseScale, 1);
+  starGroup.add(sprite);
+
+  const hitGeo = new THREE.SphereGeometry(0.85, 12, 12);
+  const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+  const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+  hitMesh.position.copy(data.pos);
+  hitMesh.userData = { index: i };
+  starGroup.add(hitMesh);
+
+  const labelDiv = document.createElement('div');
+  labelDiv.className = 'star-label';
+  labelDiv.textContent = data.name;
+  const labelObj = new CSS2DObject(labelDiv);
+  const offset = data.pos.clone();
+  offset.y += 1.0;
+  labelObj.position.copy(offset);
+  starGroup.add(labelObj);
+
+  stars.push({
+    data, sprite, hitMesh, labelDiv,
+    baseScale,
+    phase: Math.random() * Math.PI * 2,
+    hovered: false,
+    active: false
+  });
+});
+
+const linePoints = [];
+for (let i = 0; i < STAR_DATA.length - 1; i++) {
+  linePoints.push(STAR_DATA[i].pos, STAR_DATA[i + 1].pos);
+}
+const lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
+const lineMat = new THREE.LineBasicMaterial({
+  color: 0xd4af37, transparent: true, opacity: 0.32,
+  blending: THREE.AdditiveBlending, depthWrite: false
+});
+const constellationLine = new THREE.LineSegments(lineGeo, lineMat);
+starGroup.add(constellationLine);
+
+// Panel content swapping
+const legendEl = document.getElementById('legend');
+const legendHeaderLabel = document.getElementById('legendHeaderLabel');
+const legendCloseBtn = document.getElementById('legendClose');
+const views = document.querySelectorAll('.legend-view');
+
+function showView(viewName) {
+  views.forEach(v => {
+    if (v.dataset.view === viewName) v.classList.add('visible');
+    else v.classList.remove('visible');
+  });
+  if (viewName === 'about') {
+    legendHeaderLabel.textContent = 'The Navigator';
+    legendEl.classList.remove('active');
+    stars.forEach(s => s.active = false);
+  } else {
+    legendHeaderLabel.textContent = viewName;
+    legendEl.classList.add('active');
+    stars.forEach(s => s.active = s.data.name === viewName);
+  }
+}
+
+legendCloseBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  showView('about');
+});
+
+// Interaction
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let hoveredIndex = -1;
+
+function onPointerMove(event) {
+  pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -((event.clientY / window.innerHeight) * 2 - 1);
+}
+window.addEventListener('pointermove', onPointerMove);
+
+let downX = 0, downY = 0;
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  downX = e.clientX; downY = e.clientY;
+});
+renderer.domElement.addEventListener('pointerup', (e) => {
+  const dx = e.clientX - downX;
+  const dy = e.clientY - downY;
+  const moved = Math.sqrt(dx*dx + dy*dy);
+  if (moved > 6) return;
+  raycaster.setFromCamera(pointer, camera);
+  const hitMeshes = stars.map(s => s.hitMesh);
+  const intersects = raycaster.intersectObjects(hitMeshes);
+  if (intersects.length > 0) {
+    const idx = intersects[0].object.userData.index;
+    showView(stars[idx].data.view);
+  }
+});
+
+// Post-processing
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.55, 0.7, 0.18
+));
+
+// Compass — coordinates update based on camera orientation as you orbit
+const coordDisplay = document.getElementById('coordDisplay');
+const BASE_LAT = 40.7128;  // NYC
+const BASE_LNG = -74.0060;
+
+function updateCompass() {
+  // Derive camera azimuth (yaw around Y) and polar angle (tilt)
+  // azimuth: 0 when looking along -Z (the "front"), positive going right
+  const az = Math.atan2(camera.position.x, camera.position.z);
+  // polar offset from horizon (negative = looking up, positive = looking down
+  // from viewer's perspective relative to equator)
+  const r = Math.sqrt(camera.position.x * camera.position.x + camera.position.z * camera.position.z);
+  const polar = Math.atan2(camera.position.y, r);
+
+  // Map azimuth (radians) to a longitude shift. A full orbit shifts longitude
+  // by ~360° so you can watch it cycle through the globe
+  const azDeg = az * (180 / Math.PI);
+  const polarDeg = polar * (180 / Math.PI);
+
+  // Longitude derived from azimuth, wrapped and offset from NYC base
+  let lng = BASE_LNG - azDeg;
+  // Wrap to -180..180
+  while (lng > 180)  lng -= 360;
+  while (lng < -180) lng += 360;
+
+  // Latitude drifts with polar tilt (subtle — we're on a constrained arc)
+  const lat = BASE_LAT + polarDeg * 0.8;
+
+  const latStr = lat >= 0
+    ? `N ${lat.toFixed(4)}°`
+    : `S ${Math.abs(lat).toFixed(4)}°`;
+  const lngStr = lng >= 0
+    ? `E ${lng.toFixed(4)}°`
+    : `W ${Math.abs(lng).toFixed(4)}°`;
+
+  coordDisplay.textContent = `${latStr} · ${lngStr}`;
+}
+
+// Animation loop
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.getElapsedTime();
+
+  bgFar.material.uniforms.uTime.value = t;
+  bgNear.material.uniforms.uTime.value = t;
+  mwMat.uniforms.uTime.value = t;
+
+  shootingStar.update(dt, t);
+
+  raycaster.setFromCamera(pointer, camera);
+  const hitMeshes = stars.map(s => s.hitMesh);
+  const intersects = raycaster.intersectObjects(hitMeshes);
+  const newHovered = intersects.length > 0 ? intersects[0].object.userData.index : -1;
+
+  if (newHovered !== hoveredIndex) {
+    if (hoveredIndex !== -1) {
+      stars[hoveredIndex].hovered = false;
+      if (!stars[hoveredIndex].active) {
+        stars[hoveredIndex].labelDiv.classList.remove('visible');
+      }
+    }
+    if (newHovered !== -1) {
+      stars[newHovered].hovered = true;
+      stars[newHovered].labelDiv.classList.add('visible');
+      container.style.cursor = 'pointer';
+    } else {
+      container.style.cursor = 'grab';
+    }
+    hoveredIndex = newHovered;
+  }
+
+  stars.forEach((s) => {
+    const tw = 0.75 + Math.sin(t * 1.2 + s.phase) * 0.25;
+    let boost = 1.0;
+    if (s.active) boost = 1.8;
+    else if (s.hovered) boost = 1.45;
+    const sc = s.baseScale * tw * boost;
+    s.sprite.scale.set(sc, sc, 1);
+    s.sprite.material.opacity = s.active ? 1.0 : (0.8 + 0.2 * tw);
+    if (s.active) s.labelDiv.classList.add('visible');
+  });
+
+  constellationLine.material.opacity = 0.28 + Math.sin(t * 0.5) * 0.06;
+
+  bgFar.points.rotation.y  = t * 0.004;
+  bgNear.points.rotation.y = t * 0.006;
+  milkyWay.rotation.y      = t * 0.003;
+
+  controls.update();
+  updateCompass();
+  composer.render();
+  labelRenderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+  labelRenderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+
+</body>
+</html>
