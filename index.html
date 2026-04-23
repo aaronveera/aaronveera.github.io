@@ -373,8 +373,9 @@
       width: auto;
       right: auto;
     }
-    .bottom-right { right: 20px; bottom: 24px; font-size: 9px; }
-    .bottom-right .hint { display: none; }
+    /* On mobile, hide the bottom-right HUD entirely so it doesn't
+       overlap with the panel (and especially the nav dots). */
+    .bottom-right { display: none; }
     .top-name { font-size: 20px; top: 24px; }
     .legend-list li { font-size: 13.5px; }
     .legend-title { font-size: 16px; }
