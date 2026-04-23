@@ -178,26 +178,40 @@
 
   .nav-dots {
     display: flex;
-    gap: 8px;
+    gap: 2px;
     align-items: center;
   }
 
   .nav-dot {
+    /* Large invisible tap target, small visible dot in the center */
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    position: relative;
+  }
+
+  .nav-dot::after {
+    content: '';
     width: 5px;
     height: 5px;
     border-radius: 50%;
     background: rgba(232, 228, 217, 0.25);
-    transition: background 0.3s, transform 0.3s;
-    cursor: pointer;
+    transition: background 0.3s, transform 0.3s, box-shadow 0.3s;
   }
 
-  .nav-dot.active {
+  .nav-dot.active::after {
     background: #d4af37;
     transform: scale(1.4);
     box-shadow: 0 0 8px rgba(212, 175, 55, 0.6);
   }
 
-  .nav-dot:hover { background: rgba(212, 175, 55, 0.6); }
+  .nav-dot:hover::after { background: rgba(212, 175, 55, 0.6); }
 
   .legend-view {
     opacity: 0;
@@ -795,6 +809,12 @@ const starGroup = new THREE.Group();
 scene.add(starGroup);
 const stars = [];
 
+// Detect primary input type: touch devices get bigger tap targets.
+// matchMedia('(pointer: coarse)') returns true on phones/tablets,
+// false on desktop mice/trackpads.
+const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches;
+const STAR_HIT_RADIUS = IS_TOUCH ? 1.6 : 0.85;
+
 STAR_DATA.forEach((data, i) => {
   const spriteMat = new THREE.SpriteMaterial({
     map: glowTex, color: 0xffffff, transparent: true,
@@ -806,7 +826,7 @@ STAR_DATA.forEach((data, i) => {
   sprite.scale.set(baseScale, baseScale, 1);
   starGroup.add(sprite);
 
-  const hitGeo = new THREE.SphereGeometry(0.85, 12, 12);
+  const hitGeo = new THREE.SphereGeometry(STAR_HIT_RADIUS, 12, 12);
   const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
   const hitMesh = new THREE.Mesh(hitGeo, hitMat);
   hitMesh.position.copy(data.pos);
@@ -907,6 +927,44 @@ legendMinimizeBtn.addEventListener('click', (e) => {
   legendMinimizeBtn.setAttribute('title', isCollapsed ? 'Expand' : 'Minimize');
 });
 
+// Swipe navigation on the panel — left/right to flip through views
+(function enableSwipe() {
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartTime = 0;
+  const SWIPE_MIN_DISTANCE = 40;   // px — minimum horizontal travel
+  const SWIPE_MAX_VERTICAL = 50;   // px — cancel if vertical movement exceeds this (it was a scroll)
+  const SWIPE_MAX_TIME = 600;      // ms — swipes should be quick
+
+  legendEl.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    touchStartTime = Date.now();
+  }, { passive: true });
+
+  legendEl.addEventListener('touchend', (e) => {
+    // Don't interfere with taps on buttons or links inside the panel
+    const tag = (e.target && e.target.tagName || '').toLowerCase();
+    if (tag === 'a' || tag === 'button' || e.target.closest('button') || e.target.closest('a')) {
+      return;
+    }
+
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+    const dt = Date.now() - touchStartTime;
+
+    if (dt > SWIPE_MAX_TIME) return;
+    if (Math.abs(dy) > SWIPE_MAX_VERTICAL) return;   // was vertical, probably a scroll
+    if (Math.abs(dx) < SWIPE_MIN_DISTANCE) return;   // too small, probably a tap
+
+    const delta = dx < 0 ? 1 : -1;  // swipe LEFT (dx negative) = next
+    const next = (currentViewIndex + delta + VIEW_ORDER.length) % VIEW_ORDER.length;
+    showView(VIEW_ORDER[next]);
+  }, { passive: true });
+})();
+
 // Interaction
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -926,7 +984,9 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   const dx = e.clientX - downX;
   const dy = e.clientY - downY;
   const moved = Math.sqrt(dx*dx + dy*dy);
-  if (moved > 6) return;
+  // Touch devices have more jitter; be forgiving
+  const threshold = IS_TOUCH ? 12 : 6;
+  if (moved > threshold) return; // was a drag, not a tap
   raycaster.setFromCamera(pointer, camera);
   const hitMeshes = stars.map(s => s.hitMesh);
   const intersects = raycaster.intersectObjects(hitMeshes);
