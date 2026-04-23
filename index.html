@@ -115,6 +115,39 @@
   .legend.active .legend-close { opacity: 1; pointer-events: auto; }
   .legend-close:hover { color: #d4af37; }
 
+  .legend-minimize {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(232, 228, 217, 0.6);
+    cursor: pointer;
+    background: none;
+    border: 1px solid rgba(212, 175, 55, 0.25);
+    border-radius: 2px;
+    width: 22px; height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: color 0.2s, border-color 0.2s, transform 0.3s ease;
+    margin-left: 6px;
+    flex-shrink: 0;
+  }
+  .legend-minimize:hover {
+    color: #d4af37;
+    border-color: rgba(212, 175, 55, 0.6);
+  }
+
+  /* Collapsed state: panel shrinks to just the header row */
+  .legend.collapsed {
+    width: auto;
+    max-height: none;
+    padding: 14px 18px;
+  }
+  .legend.collapsed .legend-header { margin-bottom: 0; }
+  .legend.collapsed .legend-content { display: none; }
+  .legend.collapsed .legend-close { display: none; }
+  .legend.collapsed .legend-minimize { transform: rotate(180deg); }
+
   .legend-content {
     position: relative;
     min-height: 140px;
@@ -130,6 +163,41 @@
     background: rgba(212, 175, 55, 0.3);
     border-radius: 2px;
   }
+
+  /* Arrow navigation at bottom of panel */
+  .legend-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(212, 175, 55, 0.15);
+  }
+
+  .legend.collapsed .legend-nav { display: none; }
+
+  .nav-dots {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .nav-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(232, 228, 217, 0.25);
+    transition: background 0.3s, transform 0.3s;
+    cursor: pointer;
+  }
+
+  .nav-dot.active {
+    background: #d4af37;
+    transform: scale(1.4);
+    box-shadow: 0 0 8px rgba(212, 175, 55, 0.6);
+  }
+
+  .nav-dot:hover { background: rgba(212, 175, 55, 0.6); }
 
   .legend-view {
     opacity: 0;
@@ -263,7 +331,10 @@
     transition: opacity 0.35s ease-out, transform 0.35s ease-out;
     pointer-events: none;
   }
-  .star-label.visible { opacity: 1; transform: translateY(0); }
+  .star-label.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
 
   .grain {
     position: fixed; inset: 0; z-index: 4;
@@ -290,9 +361,23 @@
   }
 
   @media (max-width: 640px) {
-    .legend { left: 20px; bottom: 24px; width: calc(100vw - 40px); padding: 16px 18px; }
-    .bottom-right { right: 20px; bottom: 24px; }
-    .top-name { font-size: 20px; top: 28px; }
+    .legend {
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      width: auto;
+      max-height: 55vh;
+      padding: 14px 16px;
+    }
+    .legend.collapsed {
+      width: auto;
+      right: auto;
+    }
+    .bottom-right { right: 20px; bottom: 24px; font-size: 9px; }
+    .bottom-right .hint { display: none; }
+    .top-name { font-size: 20px; top: 24px; }
+    .legend-list li { font-size: 13.5px; }
+    .legend-title { font-size: 16px; }
   }
 </style>
 </head>
@@ -308,7 +393,9 @@
   <aside class="legend" id="legend">
     <div class="legend-header">
       <div class="legend-header-left" id="legendHeaderLabel">The Navigator</div>
-      <button class="legend-close" id="legendClose">← Back</button>
+      <div style="display: flex; align-items: center;">
+        <button class="legend-minimize" id="legendMinimize" aria-label="Minimize panel" title="Minimize">−</button>
+      </div>
     </div>
 
     <div class="legend-content">
@@ -372,6 +459,17 @@
       </div>
 
     </div>
+
+    <div class="legend-nav">
+      <div class="nav-dots" id="navDots">
+        <span class="nav-dot active" data-view="about" title="About"></span>
+        <span class="nav-dot" data-view="Work" title="Work"></span>
+        <span class="nav-dot" data-view="Writing" title="Writing"></span>
+        <span class="nav-dot" data-view="Speaking" title="Speaking"></span>
+        <span class="nav-dot" data-view="Contact" title="Contact"></span>
+      </div>
+    </div>
+
   </aside>
 
   <div class="bottom-right">
@@ -747,14 +845,28 @@ starGroup.add(constellationLine);
 // Panel content swapping
 const legendEl = document.getElementById('legend');
 const legendHeaderLabel = document.getElementById('legendHeaderLabel');
-const legendCloseBtn = document.getElementById('legendClose');
+const legendMinimizeBtn = document.getElementById('legendMinimize');
 const views = document.querySelectorAll('.legend-view');
+const navDots = document.querySelectorAll('.nav-dot');
+
+// Navigation order — matches the dot sequence
+const VIEW_ORDER = ['about', 'Work', 'Writing', 'Speaking', 'Contact'];
+let currentViewIndex = 0;
 
 function showView(viewName) {
+  const idx = VIEW_ORDER.indexOf(viewName);
+  if (idx !== -1) currentViewIndex = idx;
+
   views.forEach(v => {
     if (v.dataset.view === viewName) v.classList.add('visible');
     else v.classList.remove('visible');
   });
+
+  navDots.forEach(d => {
+    if (d.dataset.view === viewName) d.classList.add('active');
+    else d.classList.remove('active');
+  });
+
   if (viewName === 'about') {
     legendHeaderLabel.textContent = 'The Navigator';
     legendEl.classList.remove('active');
@@ -764,11 +876,34 @@ function showView(viewName) {
     legendEl.classList.add('active');
     stars.forEach(s => s.active = s.data.name === viewName);
   }
+
+  // Expand panel if minimized
+  legendEl.classList.remove('collapsed');
+  legendMinimizeBtn.textContent = '−';
 }
 
-legendCloseBtn.addEventListener('click', (e) => {
+navDots.forEach(dot => {
+  dot.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showView(dot.dataset.view);
+  });
+});
+
+// Keyboard arrows still work — nice power-user nav
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    const delta = e.key === 'ArrowRight' ? 1 : -1;
+    const next = (currentViewIndex + delta + VIEW_ORDER.length) % VIEW_ORDER.length;
+    showView(VIEW_ORDER[next]);
+  }
+});
+
+legendMinimizeBtn.addEventListener('click', (e) => {
   e.stopPropagation();
-  showView('about');
+  const isCollapsed = legendEl.classList.toggle('collapsed');
+  legendMinimizeBtn.textContent = isCollapsed ? '+' : '−';
+  legendMinimizeBtn.setAttribute('aria-label', isCollapsed ? 'Expand panel' : 'Minimize panel');
+  legendMinimizeBtn.setAttribute('title', isCollapsed ? 'Expand' : 'Minimize');
 });
 
 // Interaction
@@ -867,13 +1002,9 @@ function animate() {
   if (newHovered !== hoveredIndex) {
     if (hoveredIndex !== -1) {
       stars[hoveredIndex].hovered = false;
-      if (!stars[hoveredIndex].active) {
-        stars[hoveredIndex].labelDiv.classList.remove('visible');
-      }
     }
     if (newHovered !== -1) {
       stars[newHovered].hovered = true;
-      stars[newHovered].labelDiv.classList.add('visible');
       container.style.cursor = 'pointer';
     } else {
       container.style.cursor = 'grab';
@@ -889,7 +1020,13 @@ function animate() {
     const sc = s.baseScale * tw * boost;
     s.sprite.scale.set(sc, sc, 1);
     s.sprite.material.opacity = s.active ? 1.0 : (0.8 + 0.2 * tw);
-    if (s.active) s.labelDiv.classList.add('visible');
+
+    // Label: visible only when hovered or currently selected (active)
+    if (s.hovered || s.active) {
+      s.labelDiv.classList.add('visible');
+    } else {
+      s.labelDiv.classList.remove('visible');
+    }
   });
 
   constellationLine.material.opacity = 0.28 + Math.sin(t * 0.5) * 0.06;
