@@ -63,7 +63,6 @@
     bottom: 40px;
     left: 48px;
     width: 360px;
-    max-height: calc(100vh - 180px);
     padding: 22px 24px 22px;
     background: rgba(10, 14, 39, 0.62);
     backdrop-filter: blur(14px);
@@ -72,9 +71,7 @@
     border-radius: 2px;
     opacity: 0;
     animation: fadeIn 1.8s ease-out 2.4s forwards;
-    transition: border-color 0.4s ease;
-    display: flex;
-    flex-direction: column;
+    transition: border-color 0.4s ease, height 0.4s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .legend.active { border-color: rgba(212, 175, 55, 0.45); }
 
@@ -91,13 +88,30 @@
     justify-content: space-between;
     gap: 10px;
   }
-  .legend-header-left { display: flex; align-items: center; gap: 10px; }
+
+  .legend-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: opacity 0.35s ease-out;
+  }
+
   .legend-header-left::before {
     content: '';
     width: 6px; height: 6px;
     border-radius: 50%;
     background: #d4af37;
     box-shadow: 0 0 10px rgba(212, 175, 55, 0.8);
+  }
+
+  /* On the About view, hide the header label (keep only the minimize button) */
+  .legend.on-about .legend-header-left {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .legend.on-about .legend-header {
+    justify-content: flex-end;
+    margin-bottom: 4px;
   }
 
   .legend-close {
@@ -150,18 +164,6 @@
 
   .legend-content {
     position: relative;
-    min-height: 140px;
-    overflow-y: auto;
-    flex: 1;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(212, 175, 55, 0.3) transparent;
-  }
-
-  .legend-content::-webkit-scrollbar { width: 4px; }
-  .legend-content::-webkit-scrollbar-track { background: transparent; }
-  .legend-content::-webkit-scrollbar-thumb {
-    background: rgba(212, 175, 55, 0.3);
-    border-radius: 2px;
   }
 
   /* Arrow navigation at bottom of panel */
@@ -380,7 +382,6 @@
       right: 16px;
       bottom: 16px;
       width: auto;
-      max-height: 55vh;
       padding: 14px 16px;
     }
     .legend.collapsed {
@@ -405,7 +406,7 @@
 <div class="overlay">
   <div class="top-name">Aaron <em>Veerasuntharam</em></div>
 
-  <aside class="legend" id="legend">
+  <aside class="legend on-about" id="legend">
     <div class="legend-header">
       <div class="legend-header-left" id="legendHeaderLabel">The Navigator</div>
       <div style="display: flex; align-items: center;">
@@ -878,6 +879,9 @@ function showView(viewName) {
   const idx = VIEW_ORDER.indexOf(viewName);
   if (idx !== -1) currentViewIndex = idx;
 
+  // Measure current panel height before the swap so we can animate from it
+  const currentHeight = legendEl.offsetHeight;
+
   views.forEach(v => {
     if (v.dataset.view === viewName) v.classList.add('visible');
     else v.classList.remove('visible');
@@ -891,16 +895,40 @@ function showView(viewName) {
   if (viewName === 'about') {
     legendHeaderLabel.textContent = 'The Navigator';
     legendEl.classList.remove('active');
+    legendEl.classList.add('on-about');
     stars.forEach(s => s.active = false);
   } else {
     legendHeaderLabel.textContent = viewName;
     legendEl.classList.add('active');
+    legendEl.classList.remove('on-about');
     stars.forEach(s => s.active = s.data.name === viewName);
   }
 
   // Expand panel if minimized
   legendEl.classList.remove('collapsed');
   legendMinimizeBtn.textContent = '−';
+
+  // Animate the panel height from current to new
+  // 1. Temporarily remove height so we can measure the natural new height
+  legendEl.style.height = 'auto';
+  const targetHeight = legendEl.offsetHeight;
+
+  // 2. Snap back to the old height (no transition yet)
+  legendEl.style.transition = 'none';
+  legendEl.style.height = currentHeight + 'px';
+
+  // 3. Force reflow, then re-enable transition and animate to target
+  // eslint-disable-next-line no-unused-expressions
+  legendEl.offsetHeight;
+  legendEl.style.transition = '';
+  legendEl.style.height = targetHeight + 'px';
+
+  // 4. After the transition, clear the inline height so it stays responsive
+  //    to any future content changes (e.g. window resize)
+  clearTimeout(legendEl._heightResetTimer);
+  legendEl._heightResetTimer = setTimeout(() => {
+    legendEl.style.height = '';
+  }, 450);
 }
 
 navDots.forEach(dot => {
