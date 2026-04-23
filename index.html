@@ -1007,6 +1007,11 @@ window.addEventListener('pointermove', onPointerMove);
 let downX = 0, downY = 0;
 renderer.domElement.addEventListener('pointerdown', (e) => {
   downX = e.clientX; downY = e.clientY;
+  // Update pointer immediately for raycaster — on touch devices,
+  // pointermove may not fire before pointerup on a quick tap,
+  // so we set coordinates from the touch-down location.
+  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -((e.clientY / window.innerHeight) * 2 - 1);
 });
 renderer.domElement.addEventListener('pointerup', (e) => {
   const dx = e.clientX - downX;
@@ -1015,6 +1020,9 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   // Touch devices have more jitter; be forgiving
   const threshold = IS_TOUCH ? 12 : 6;
   if (moved > threshold) return; // was a drag, not a tap
+  // Use the final touch position for the raycast (tap release point)
+  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -((e.clientY / window.innerHeight) * 2 - 1);
   raycaster.setFromCamera(pointer, camera);
   const hitMeshes = stars.map(s => s.hitMesh);
   const intersects = raycaster.intersectObjects(hitMeshes);
